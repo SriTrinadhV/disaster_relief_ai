@@ -1,0 +1,13 @@
+region,population,population_density,rainfall_mm,river_level_m,vulnerability_index
+Coastal City,245000,3200,180,6.2,78
+Riverside Town,98000,2100,145,5.7,72
+Delta Zone,156000,2800,210,6.8,85
+Hillview,72000,950,85,2.9,38
+Metro East,310000,4500,130,4.8,64
+Green Plains,128000,1400,92,3.6,46
+South Bay,187000,2600,165,5.9,74
+North Basin,112000,1750,155,5.3,68
+Central District,225000,3900,118,4.2,58
+Lakefront,143000,1950,138,5.0,61
+Sunrise Valley,89000,1200,76,2.7,35
+Harbor Point,168000,3000,172,6.1,79
