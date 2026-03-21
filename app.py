@@ -10,17 +10,94 @@ from utils.risk_engine import calculate_flood_risk
 
 
 st.set_page_config(
-    page_title="DisasterRelief AI",
-    page_icon="🌊",
+    page_title="Sentinel AI",
+    page_icon="S",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 
-RISK_COLORS = {
-    "High Risk": "#d62828",
-    "Medium Risk": "#f4a261",
-    "Low Risk": "#2a9d8f",
+THEMES = {
+    "Dark": {
+        "background_gradient": "linear-gradient(180deg, #001d31 0%, #003049 100%)",
+        "surface": "#01263c",
+        "surface_alt": "#0a3d5b",
+        "sidebar": "linear-gradient(180deg, #00253c 0%, #003049 100%)",
+        "text": "#ffffff",
+        "muted_text": "#c7d6e2",
+        "border": "#1f4f6b",
+        "header_bg": "rgba(0, 48, 73, 0.96)",
+        "button_bg": "#ffffff",
+        "button_text": "#003049",
+        "button_hover": "#dbe8f1",
+        "metric_shadow": "0 14px 28px rgba(0, 17, 28, 0.28)",
+        "chart_template": "plotly_dark",
+        "chart_plot_bg": "#01263c",
+        "chart_scale": ["#5d88a3", "#9fc3da", "#ffffff"],
+        "gauge_low": "#24475d",
+        "gauge_mid": "#4d7894",
+        "gauge_high": "#90b7cf",
+        "gauge_bar": "#ffffff",
+        "alert_styles": {
+            "error": {"background": "#e8f1f7", "text": "#003049"},
+            "warning": {"background": "#0a3d5b", "text": "#ffffff"},
+            "info": {"background": "#01263c", "text": "#ffffff"},
+            "success": {"background": "#003049", "text": "#ffffff"},
+        },
+        "risk_styles": {
+            "High Risk": {"background": "#ffffff", "text": "#003049"},
+            "Medium Risk": {"background": "#7ba2bc", "text": "#00253c"},
+            "Low Risk": {"background": "#0a3d5b", "text": "#ffffff"},
+        },
+        "table_header_bg": "#003049",
+        "table_header_text": "#ffffff",
+        "table_row_bg": "#01263c",
+        "table_row_alt_bg": "#0a3049",
+        "table_text": "#ffffff",
+        "slider_track": "rgba(255, 255, 255, 0.28)",
+        "slider_fill": "#ffffff",
+        "slider_thumb": "#ffffff",
+    },
+    "Light": {
+        "background_gradient": "linear-gradient(180deg, #ffffff 0%, #eef5f9 100%)",
+        "surface": "#ffffff",
+        "surface_alt": "#f5f9fc",
+        "sidebar": "linear-gradient(180deg, #ffffff 0%, #eef5f9 100%)",
+        "text": "#003049",
+        "muted_text": "#49667a",
+        "border": "#bdd0dd",
+        "header_bg": "rgba(255, 255, 255, 0.97)",
+        "button_bg": "#003049",
+        "button_text": "#ffffff",
+        "button_hover": "#0a3d5b",
+        "metric_shadow": "0 12px 24px rgba(0, 48, 73, 0.08)",
+        "chart_template": "simple_white",
+        "chart_plot_bg": "#ffffff",
+        "chart_scale": ["#d8e8f2", "#7ba2bc", "#003049"],
+        "gauge_low": "#dfeaf1",
+        "gauge_mid": "#93b6cc",
+        "gauge_high": "#4d7894",
+        "gauge_bar": "#003049",
+        "alert_styles": {
+            "error": {"background": "#003049", "text": "#ffffff"},
+            "warning": {"background": "#eaf3f8", "text": "#003049"},
+            "info": {"background": "#f5f9fc", "text": "#003049"},
+            "success": {"background": "#ffffff", "text": "#003049"},
+        },
+        "risk_styles": {
+            "High Risk": {"background": "#003049", "text": "#ffffff"},
+            "Medium Risk": {"background": "#9fc3da", "text": "#003049"},
+            "Low Risk": {"background": "#eaf3f8", "text": "#003049"},
+        },
+        "table_header_bg": "#003049",
+        "table_header_text": "#ffffff",
+        "table_row_bg": "#ffffff",
+        "table_row_alt_bg": "#f6fafc",
+        "table_text": "#003049",
+        "slider_track": "#b9cedc",
+        "slider_fill": "#003049",
+        "slider_thumb": "#003049",
+    },
 }
 
 
@@ -30,7 +107,316 @@ def load_data_cached() -> pd.DataFrame:
     return load_region_data()
 
 
-def build_gauge_chart(risk_score: float) -> go.Figure:
+def get_theme_colors(theme_mode: str) -> dict:
+    """Return the active theme palette."""
+    return THEMES.get(theme_mode, THEMES["Dark"])
+
+
+def apply_custom_theme(colors: dict) -> None:
+    """Inject CSS that adapts the app to the selected theme."""
+    st.markdown(
+        f"""
+        <style>
+        .stApp {{
+            background: {colors["background_gradient"]};
+            color: {colors["text"]};
+        }}
+        html, body, [class*="css"] {{
+            font-family: "Trebuchet MS", Verdana, sans-serif;
+            color: {colors["text"]};
+        }}
+        h1, h2, h3, h4, h5, h6, p, span, label, div {{
+            color: inherit;
+        }}
+        h1, h2, h3, h4 {{
+            color: {colors["text"]} !important;
+            letter-spacing: -0.02em;
+        }}
+        @keyframes fadeUp {{
+            from {{
+                opacity: 0;
+                transform: translateY(12px);
+            }}
+            to {{
+                opacity: 1;
+                transform: translateY(0);
+            }}
+        }}
+        [data-testid="stAppViewContainer"] > .main {{
+            padding-top: 0.75rem;
+        }}
+        [data-testid="stSidebar"] {{
+            background: {colors["sidebar"]};
+            border-right: 1px solid {colors["border"]};
+        }}
+        [data-testid="stSidebar"] * {{
+            color: {colors["text"]};
+        }}
+        [data-testid="stSidebar"] [data-baseweb="select"] > div,
+        [data-testid="stSidebar"] [data-baseweb="base-input"] > div {{
+            background: {colors["surface"]};
+            border: 1px solid {colors["border"]};
+            color: {colors["text"]};
+            border-radius: 14px;
+        }}
+        [data-testid="stSidebar"] div[data-baseweb="slider"] > div > div {{
+            background: {colors["slider_track"]} !important;
+        }}
+        [data-testid="stSidebar"] div[data-baseweb="slider"] div[style*="background"] {{
+            background: {colors["slider_fill"]} !important;
+        }}
+        [data-testid="stSidebar"] div[data-baseweb="slider"] [role="slider"] {{
+            background: {colors["slider_thumb"]} !important;
+            box-shadow: 0 0 0 2px {colors["slider_thumb"]} !important;
+            border: none !important;
+        }}
+        [data-testid="stSidebar"] .stButton button,
+        [data-testid="stPopover"] button {{
+            background: {colors["button_bg"]};
+            color: {colors["button_text"]};
+            border: 1px solid {colors["border"]};
+            border-radius: 14px;
+            font-weight: 700;
+            opacity: 1 !important;
+            visibility: visible !important;
+            transition: all 0.2s ease;
+        }}
+        [data-testid="stSidebar"] .stButton button:hover,
+        [data-testid="stPopover"] button:hover {{
+            background: {colors["button_hover"]};
+            border-color: {colors["button_hover"]};
+            transform: translateY(-1px);
+        }}
+        [data-testid="stSidebar"] .stButton button *,
+        [data-testid="stSidebar"] .stButton button span,
+        [data-testid="stSidebar"] .stButton button div,
+        [data-testid="stPopover"] button *,
+        [data-testid="stPopover"] button span,
+        [data-testid="stPopover"] button div {{
+            color: {colors["button_text"]} !important;
+            fill: {colors["button_text"]} !important;
+            opacity: 1 !important;
+        }}
+        [data-testid="stRadio"] label,
+        [data-testid="stMarkdownContainer"],
+        .stCaption,
+        .stSubheader,
+        .stText,
+        .stMarkdown,
+        .stSelectbox label,
+        .stSlider label {{
+            color: {colors["text"]} !important;
+        }}
+        div[data-testid="metric-container"] {{
+            background: {colors["surface"]};
+            border: 1px solid {colors["border"]};
+            border-radius: 18px;
+            padding: 1rem 1rem 0.9rem 1rem;
+            box-shadow: {colors["metric_shadow"]};
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            animation: fadeUp 0.45s ease;
+        }}
+        div[data-testid="metric-container"]:hover {{
+            transform: translateY(-4px);
+            box-shadow: 0 16px 30px rgba(0, 0, 0, 0.14);
+        }}
+        div[data-testid="metric-container"] label,
+        div[data-testid="metric-container"] div {{
+            color: {colors["text"]} !important;
+        }}
+        .sticky-header {{
+            position: sticky;
+            top: 0;
+            z-index: 999;
+            background: {colors["header_bg"]};
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid {colors["border"]};
+            padding: 0.9rem 1.4rem;
+            margin-bottom: 1rem;
+            border-radius: 0 0 18px 18px;
+        }}
+        .sticky-header-inner {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+        .brand-title {{
+            font-size: 2rem;
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            color: {colors["text"]};
+        }}
+        .brand-subtitle {{
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: {colors["muted_text"]};
+            font-weight: 700;
+        }}
+        .hero-box {{
+            background: {colors["surface"]};
+            padding: 1.35rem 1.5rem;
+            border-radius: 22px;
+            border: 1px solid {colors["border"]};
+            margin-bottom: 1rem;
+            box-shadow: {colors["metric_shadow"]};
+            animation: fadeUp 0.5s ease;
+        }}
+        .intro-copy {{
+            color: {colors["muted_text"]};
+            margin: 0;
+            font-size: 1.02rem;
+        }}
+        .risk-card {{
+            padding: 1rem 1.2rem;
+            border-radius: 16px;
+            text-align: center;
+            font-weight: 800;
+            margin-top: 0.3rem;
+            margin-bottom: 0.8rem;
+            border: 1px solid {colors["border"]};
+            animation: fadeUp 0.55s ease;
+        }}
+        .alert-box {{
+            border-radius: 18px;
+            padding: 1rem 1.15rem;
+            border: 1px solid {colors["border"]};
+            box-shadow: {colors["metric_shadow"]};
+            animation: fadeUp 0.45s ease;
+            margin-bottom: 0.5rem;
+        }}
+        .alert-title {{
+            font-size: 1rem;
+            font-weight: 800;
+            margin-bottom: 0.25rem;
+        }}
+        .panel-box {{
+            background: {colors["surface"]};
+            border: 1px solid {colors["border"]};
+            border-radius: 18px;
+            padding: 1rem 1.1rem;
+            box-shadow: {colors["metric_shadow"]};
+            animation: fadeUp 0.55s ease;
+        }}
+        .table-shell {{
+            background: {colors["surface"]};
+            border: 1px solid {colors["border"]};
+            border-radius: 20px;
+            padding: 0.5rem;
+            overflow-x: auto;
+            box-shadow: {colors["metric_shadow"]};
+            animation: fadeUp 0.6s ease;
+        }}
+        .custom-table {{
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            color: {colors["table_text"]};
+        }}
+        .custom-table thead th {{
+            background: {colors["table_header_bg"]};
+            color: {colors["table_header_text"]};
+            text-align: left;
+            padding: 0.9rem 0.75rem;
+            border-bottom: 1px solid {colors["border"]};
+            font-weight: 700;
+        }}
+        .custom-table thead th:first-child {{
+            border-top-left-radius: 14px;
+        }}
+        .custom-table thead th:last-child {{
+            border-top-right-radius: 14px;
+        }}
+        .custom-table tbody tr:nth-child(odd) {{
+            background: {colors["table_row_bg"]};
+        }}
+        .custom-table tbody tr:nth-child(even) {{
+            background: {colors["table_row_alt_bg"]};
+        }}
+        .custom-table td {{
+            padding: 0.85rem 0.75rem;
+            border-bottom: 1px solid {colors["border"]};
+            color: {colors["table_text"]};
+        }}
+        .custom-table tbody tr:last-child td {{
+            border-bottom: none;
+        }}
+        [data-testid="stPopover"] {{
+            z-index: 20;
+        }}
+        [data-testid="stPopoverContent"] {{
+            background: {colors["surface"]} !important;
+            border: 1px solid {colors["border"]} !important;
+            color: {colors["text"]} !important;
+        }}
+        details[data-testid="stExpander"] {{
+            background: {colors["surface"]};
+            border: 1px solid {colors["border"]};
+            border-radius: 18px;
+            box-shadow: {colors["metric_shadow"]};
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }}
+        details[data-testid="stExpander"] summary {{
+            background: {colors["surface"]};
+            color: {colors["text"]};
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid {colors["border"]};
+        }}
+        details[data-testid="stExpander"][open] summary {{
+            margin-bottom: 0;
+        }}
+        details[data-testid="stExpander"] div[role="button"] p,
+        details[data-testid="stExpander"] summary p,
+        details[data-testid="stExpander"] p,
+        details[data-testid="stExpander"] div {{
+            color: {colors["text"]} !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_sticky_header(colors: dict, theme_mode: str) -> None:
+    """Render a brand bar that stays visible while scrolling."""
+    st.markdown(
+        f"""
+        <div class="sticky-header">
+            <div class="sticky-header-inner">
+                <div>
+                    <div class="brand-title">SENTINEL AI</div>
+                    <div class="brand-subtitle">Prediction And Response System</div>
+                </div>
+                <div class="brand-subtitle">Theme: {theme_mode}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_alert_box(alert_details: dict, colors: dict) -> None:
+    """Render a monochrome alert panel without Streamlit's default colors."""
+    style = colors["alert_styles"].get(alert_details["severity"], colors["alert_styles"]["info"])
+    st.markdown(
+        (
+            f"<div class='alert-box' style='background:{style['background']}; color:{style['text']};'>"
+            f"<div class='alert-title'>{alert_details['title']}</div>"
+            f"<div>{alert_details['message']}</div>"
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_html_table(dataframe: pd.DataFrame, colors: dict) -> None:
+    """Render a theme-aware HTML table for consistent light and dark styling."""
+    html_table = dataframe.to_html(index=False, classes="custom-table", border=0)
+    st.markdown(f"<div class='table-shell'>{html_table}</div>", unsafe_allow_html=True)
+
+
+def build_gauge_chart(risk_score: float, colors: dict) -> go.Figure:
     """Create a simple gauge chart for the risk score."""
     figure = go.Figure(
         go.Indicator(
@@ -39,25 +425,30 @@ def build_gauge_chart(risk_score: float) -> go.Figure:
             number={"suffix": "/100", "font": {"size": 34}},
             gauge={
                 "axis": {"range": [0, 100]},
-                "bar": {"color": "#1d3557"},
+                "bar": {"color": colors["gauge_bar"]},
                 "steps": [
-                    {"range": [0, 40], "color": "#b7e4c7"},
-                    {"range": [40, 70], "color": "#ffe8a1"},
-                    {"range": [70, 100], "color": "#f4a3a3"},
+                    {"range": [0, 40], "color": colors["gauge_low"]},
+                    {"range": [40, 70], "color": colors["gauge_mid"]},
+                    {"range": [70, 100], "color": colors["gauge_high"]},
                 ],
                 "threshold": {
-                    "line": {"color": "#d62828", "width": 4},
+                    "line": {"color": colors["text"], "width": 4},
                     "thickness": 0.8,
                     "value": risk_score,
                 },
             },
         )
     )
-    figure.update_layout(margin=dict(l=20, r=20, t=30, b=20), height=280)
+    figure.update_layout(
+        margin=dict(l=20, r=20, t=30, b=20),
+        height=280,
+        paper_bgcolor="rgba(0,0,0,0)",
+        font={"color": colors["text"], "family": "Trebuchet MS, Verdana, sans-serif"},
+    )
     return figure
 
 
-def build_region_comparison_chart(dataframe: pd.DataFrame) -> go.Figure:
+def build_region_comparison_chart(dataframe: pd.DataFrame, colors: dict) -> go.Figure:
     """Compare baseline regional risk using the dataset values."""
     chart_data = dataframe.copy()
     chart_data["baseline_risk_score"] = chart_data.apply(
@@ -76,15 +467,24 @@ def build_region_comparison_chart(dataframe: pd.DataFrame) -> go.Figure:
         x="region",
         y="baseline_risk_score",
         color="baseline_risk_score",
-        color_continuous_scale=["#2a9d8f", "#f4a261", "#d62828"],
+        color_continuous_scale=colors["chart_scale"],
         labels={"region": "Region", "baseline_risk_score": "Risk Score"},
         title="Regional Flood Risk Comparison",
     )
-    figure.update_layout(height=380, coloraxis_showscale=False, xaxis_tickangle=-20)
+    figure.update_layout(
+        height=380,
+        coloraxis_showscale=False,
+        xaxis_tickangle=-20,
+        template=colors["chart_template"],
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=colors["chart_plot_bg"],
+        font={"color": colors["text"], "family": "Trebuchet MS, Verdana, sans-serif"},
+        title_font={"size": 24},
+    )
     return figure
 
 
-def build_factor_chart(factor_scores: dict) -> go.Figure:
+def build_factor_chart(factor_scores: dict, colors: dict) -> go.Figure:
     """Show the contribution of each factor to the final risk."""
     factor_frame = pd.DataFrame(
         {"Factor": list(factor_scores.keys()), "Normalized Score": list(factor_scores.values())}
@@ -94,72 +494,38 @@ def build_factor_chart(factor_scores: dict) -> go.Figure:
         x="Factor",
         y="Normalized Score",
         color="Normalized Score",
-        color_continuous_scale=["#cdeae5", "#f4a261", "#d62828"],
+        color_continuous_scale=colors["chart_scale"],
         title="Risk Factor Breakdown",
     )
-    figure.update_layout(height=320, coloraxis_showscale=False)
+    figure.update_layout(
+        height=320,
+        coloraxis_showscale=False,
+        template=colors["chart_template"],
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor=colors["chart_plot_bg"],
+        font={"color": colors["text"], "family": "Trebuchet MS, Verdana, sans-serif"},
+        title_font={"size": 24},
+    )
     return figure
-
-
-def show_alert(alert_details: dict) -> None:
-    """Display alert messages using Streamlit status banners."""
-    severity = alert_details["severity"]
-    title = alert_details["title"]
-    message = alert_details["message"]
-
-    if severity == "error":
-        st.error(f"{title}: {message}")
-    elif severity == "warning":
-        st.warning(f"{title}: {message}")
-    elif severity == "info":
-        st.info(f"{title}: {message}")
-    else:
-        st.success(f"{title}: {message}")
 
 
 def main() -> None:
     """Render the Streamlit dashboard."""
     dataframe = load_data_cached()
 
-    st.markdown(
-        """
-        <style>
-        .hero-box {
-            background: linear-gradient(135deg, #e0f2fe, #f8fafc 55%, #dbeafe);
-            padding: 1.4rem 1.6rem;
-            border-radius: 18px;
-            border: 1px solid #d7e3f4;
-            margin-bottom: 1rem;
-        }
-        .risk-card {
-            padding: 1rem 1.2rem;
-            border-radius: 16px;
-            color: white;
-            text-align: center;
-            font-weight: 600;
-            margin-top: 0.3rem;
-            margin-bottom: 0.8rem;
-        }
-        .panel-box {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 16px;
-            padding: 1rem 1.1rem;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    with st.sidebar:
+        st.header("Input Controls")
+        theme_mode = st.radio("Theme Mode", options=["Dark", "Light"], index=0, horizontal=True)
+        colors = get_theme_colors(theme_mode)
+
+    apply_custom_theme(colors)
+    render_sticky_header(colors, theme_mode)
 
     st.markdown(
         """
         <div class="hero-box">
-            <h1 style="margin-bottom:0.3rem;">🌊 DisasterRelief AI</h1>
-            <p style="font-size:1.05rem; margin-bottom:0.2rem;">
-                Prediction & Response System for fast, explainable flood risk analysis.
-            </p>
-            <p style="margin:0; color:#475569;">
-                Designed for hackathon demos: select a region, adjust live conditions, and generate response recommendations in seconds.
+            <p class="intro-copy">
+                A simple monochrome dashboard for flood prediction, affected population estimation, and response planning with a clean dark and light viewing mode.
             </p>
         </div>
         """,
@@ -167,7 +533,6 @@ def main() -> None:
     )
 
     with st.sidebar:
-        st.header("Input Controls")
         region_names = get_region_names(dataframe)
         selected_region = st.selectbox("Select Region", options=region_names)
         disaster_type = st.selectbox(
@@ -203,10 +568,6 @@ def main() -> None:
 
         analyze_clicked = st.button("Analyze Risk", type="primary", use_container_width=True)
 
-    if not analyze_clicked:
-        st.info("Select a region, adjust the inputs, and click Analyze Risk to generate a live disaster response summary.")
-        analyze_clicked = True
-
     selected_disaster_type = disaster_type.split(" ")[0].lower()
     risk_result = calculate_flood_risk(
         rainfall_mm=rainfall_mm,
@@ -223,13 +584,20 @@ def main() -> None:
         risk_category=risk_result.risk_category,
     )
 
-    risk_color = RISK_COLORS[risk_result.risk_category]
+    if analyze_clicked:
+        st.toast(f"Analysis updated for {selected_region}")
+
+    risk_style = colors["risk_styles"][risk_result.risk_category]
 
     top_left, top_mid, top_right = st.columns([1.1, 1, 1])
     with top_left:
         st.subheader("Risk Summary")
         st.markdown(
-            f"<div class='risk-card' style='background:{risk_color};'>{risk_result.risk_category}</div>",
+            (
+                "<div class='risk-card' "
+                f"style='background:{risk_style['background']}; color:{risk_style['text']};'>"
+                f"{risk_result.risk_category}</div>"
+            ),
             unsafe_allow_html=True,
         )
         st.metric("Risk Score", f"{risk_result.risk_score}/100")
@@ -244,11 +612,11 @@ def main() -> None:
         st.metric("Temporary Shelters", recommendations["temporary_shelters"])
 
     st.subheader("Early Warning System")
-    show_alert(alert_details)
+    render_alert_box(alert_details, colors)
 
     gauge_col, impact_col = st.columns([1.15, 0.85])
     with gauge_col:
-        st.plotly_chart(build_gauge_chart(risk_result.risk_score), use_container_width=True)
+        st.plotly_chart(build_gauge_chart(risk_result.risk_score, colors), use_container_width=True)
     with impact_col:
         st.markdown("<div class='panel-box'>", unsafe_allow_html=True)
         st.markdown("### Impact Estimate")
@@ -258,6 +626,11 @@ def main() -> None:
         st.write(f"**Current rainfall:** {rainfall_mm} mm")
         st.write(f"**Current river level:** {river_level_m:.1f} m")
         st.write(f"**Vulnerability index:** {vulnerability_index}/100")
+        with st.popover("Open quick insight"):
+            st.write(f"Risk category: {risk_result.risk_category}")
+            st.write(f"Affected population: {risk_result.affected_population:,}")
+            st.write(f"Rescue teams suggested: {recommendations['rescue_teams']}")
+            st.write("This panel is designed as a fast judge-friendly summary.")
         st.markdown("</div>", unsafe_allow_html=True)
 
     rec_col, factor_col = st.columns(2)
@@ -274,14 +647,14 @@ def main() -> None:
                 ],
             }
         )
-        st.dataframe(recommendation_frame, use_container_width=True, hide_index=True)
+        render_html_table(recommendation_frame, colors)
     with factor_col:
-        st.plotly_chart(build_factor_chart(risk_result.factor_scores), use_container_width=True)
+        st.plotly_chart(build_factor_chart(risk_result.factor_scores, colors), use_container_width=True)
 
-    st.plotly_chart(build_region_comparison_chart(dataframe), use_container_width=True)
+    st.plotly_chart(build_region_comparison_chart(dataframe, colors), use_container_width=True)
 
     st.subheader("Dataset Preview")
-    st.dataframe(dataframe, use_container_width=True, hide_index=True)
+    render_html_table(dataframe, colors)
 
     with st.expander("See scoring logic used in this demo"):
         st.write(
