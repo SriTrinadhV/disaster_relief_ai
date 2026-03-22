@@ -1,8 +1,11 @@
+import time
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from utils.ai_agent import get_gemini_response
 from utils.data_loader import (
     get_disaster_subset,
     get_disaster_types,
@@ -11,7 +14,12 @@ from utils.data_loader import (
     load_region_data,
 )
 from utils.recommendation_engine import calculate_resource_recommendations
-from utils.resqnet_engine import assess_region, build_sms_alert
+from utils.resqnet_engine import (
+    assess_region,
+    build_sms_alert,
+    estimate_notified_users,
+    simulate_disaster_progression,
+)
 
 
 st.set_page_config(
@@ -23,15 +31,10 @@ st.set_page_config(
 
 
 COSMOS_BLUE = "#003049"
+LIGHT_BLUE = "#E6F0FF"
 HIGH_RISK_COLOR = "#FF4B4B"
 MEDIUM_RISK_COLOR = "#FFD93D"
 LOW_RISK_COLOR = "#4CAF50"
-
-COLOR_MAP = {
-    "High": HIGH_RISK_COLOR,
-    "Medium": MEDIUM_RISK_COLOR,
-    "Low": LOW_RISK_COLOR,
-}
 
 
 @st.cache_data
@@ -40,13 +43,34 @@ def load_data_cached() -> pd.DataFrame:
     return load_region_data()
 
 
+def initialize_state() -> None:
+    """Create session state keys used by the dashboard flow."""
+    defaults = {
+        "analysis_ready": False,
+        "analysis_state": None,
+        "simulation_data": None,
+        "simulation_label": "",
+        "ai_answer": "",
+        "sms_status": "",
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def get_default_rainfall(risk_level: str) -> int:
+    """Provide a simple starting rainfall/severity value for the slider."""
+    defaults = {"High": 80, "Medium": 55, "Low": 30}
+    return defaults.get(risk_level, 50)
+
+
 def apply_resqnet_theme() -> None:
-    """Inject the RESQnet dark theme and header styling."""
+    """Inject the current RESQnet theme and simple header styling."""
     st.markdown(
         f"""
         <style>
         .stApp {{
-            background: #003049;
+            background: {COSMOS_BLUE};
             color: #ffffff;
         }}
         html, body, [class*="css"] {{
@@ -62,80 +86,20 @@ def apply_resqnet_theme() -> None:
         }}
         .block-container {{
             padding-top: 1rem;
+            padding-bottom: 2rem;
         }}
         [data-testid="stSidebar"] {{
-            background: #003049;
-            border-right: 1px solid #6ea0f1;
+            background: {COSMOS_BLUE};
+            border-right: 1px solid #8db4ef;
         }}
         [data-testid="stSidebar"] * {{
             color: #ffffff;
         }}
         [data-testid="stSidebar"] [data-baseweb="select"] > div {{
-            background: #0a347b;
-            border: 1px solid #7aa8ef;
+            background: #0b3f5f;
+            border: 1px solid #8db4ef;
             color: #ffffff;
-            border-radius: 14px;
-        }}
-        [data-testid="stSidebar"] .stRadio label {{
-            color: #ffffff !important;
-        }}
-        div[data-testid="metric-container"] {{
-            background: #003049;
-            border: 1px solid #7aa8ef;
-            border-radius: 18px;
-            padding: 1rem;
-            box-shadow: none;
-        }}
-        div[data-testid="metric-container"] label,
-        div[data-testid="metric-container"] div {{
-            color: #ffffff !important;
-        }}
-        .fixed-header {{
-            position: fixed;
-            top: 10px;
-            left: 80px;
-            z-index: 1002;
-            background: #003049;
-            border: 1px solid #7aa8ef;
-            border-radius: 14px;
-            padding: 0.55rem 0.9rem 0.6rem 0.9rem;
-            box-shadow: none;
-        }}
-        .header-title {{
-            color: #ffffff;
-            font-size: 1.2rem;
-            font-weight: 900;
-            letter-spacing: -0.04em;
-            line-height: 1;
-        }}
-        .header-subtitle {{
-            color: #dbe8ff;
-            text-transform: uppercase;
-            letter-spacing: 0.16em;
-            font-size: 0.68rem;
-            font-weight: 700;
-            margin-top: 0.2rem;
-        }}
-        [data-testid="stSidebar"] .stButton button,
-        [data-testid="stPopover"] button {{
-            background: #ffffff;
-            color: #003049;
-            border: 1px solid #ffffff;
-            border-radius: 14px;
-            font-weight: 800;
-            transition: all 0.2s ease;
-        }}
-        [data-testid="stSidebar"] .stButton button *,
-        [data-testid="stPopover"] button * {{
-            color: #003049 !important;
-            fill: #003049 !important;
-        }}
-        [data-testid="stSidebar"] .stButton button:hover,
-        [data-testid="stPopover"] button:hover {{
-            color: #ffffff;
-            background: #dbe8ff;
-            border-color: #dbe8ff;
-            transform: none;
+            border-radius: 12px;
         }}
         [data-testid="stSidebar"] div[data-baseweb="slider"] > div > div:nth-child(1) {{
             background: #a7c5f2 !important;
@@ -150,66 +114,89 @@ def apply_resqnet_theme() -> None:
         [data-testid="stSidebar"] div[data-baseweb="slider"] [role="slider"] {{
             background: {COSMOS_BLUE} !important;
             border: 3px solid #ffffff !important;
-            box-shadow: 0 0 0 2px {COSMOS_BLUE} !important;
+            box-shadow: 0 0 0 2px #a7c5f2 !important;
         }}
-        .resq-card {{
-            background: #003049;
-            border: 1px solid #7aa8ef;
-            border-radius: 20px;
-            padding: 1rem 1.15rem;
+        div[data-testid="metric-container"] {{
+            background: {COSMOS_BLUE};
+            border: 1px solid #8db4ef;
+            border-radius: 14px;
+            padding: 0.9rem;
             box-shadow: none;
         }}
-        .section-heading {{
-            margin-top: 0.35rem;
+        div[data-testid="metric-container"] label,
+        div[data-testid="metric-container"] div {{
+            color: #ffffff !important;
         }}
-        .risk-chip {{
-            display: inline-block;
-            padding: 0.75rem 1rem;
-            border-radius: 16px;
-            font-weight: 800;
-            text-align: center;
-            min-width: 160px;
-            background: #003049;
-            color: #ffffff;
-            border: 1px solid #7aa8ef;
+        .fixed-header {{
+            position: fixed;
+            top: 10px;
+            left: 80px;
+            z-index: 1002;
+            background: {COSMOS_BLUE};
+            border: 1px solid #8db4ef;
+            border-radius: 12px;
+            padding: 0.55rem 0.9rem 0.6rem 0.9rem;
         }}
-        .warning-box {{
-            border-radius: 18px;
-            padding: 1rem 1.1rem;
+        .header-title {{
             color: #ffffff;
-            border: 1px solid #7aa8ef;
-            background: #003049;
+            font-size: 1.2rem;
+            font-weight: 900;
+            line-height: 1;
         }}
-        .sms-box {{
-            background: #003049;
-            color: #ffffff;
-            border-left: 6px solid {COSMOS_BLUE};
-            border-radius: 18px;
-            padding: 1rem 1.15rem;
-            white-space: pre-wrap;
-            font-family: Consolas, "Courier New", monospace;
+        .header-subtitle {{
+            color: #dbe8ff;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            font-size: 0.68rem;
+            font-weight: 700;
+            margin-top: 0.2rem;
+        }}
+        .resq-box {{
+            background: {LIGHT_BLUE};
+            color: #10263d;
+            border: 1px solid #bfd4f3;
+            border-radius: 12px;
+            padding: 0.9rem 1rem;
+            margin-bottom: 1rem;
+        }}
+        [data-testid="stSidebar"] .stButton button,
+        [data-testid="stButton"] > button,
+        [data-testid="stPopover"] button {{
+            background: #ffffff;
+            color: {COSMOS_BLUE};
+            border: 1px solid #ffffff;
+            border-radius: 12px;
+            font-weight: 700;
             box-shadow: none;
+        }}
+        [data-testid="stSidebar"] .stButton button *,
+        [data-testid="stButton"] > button *,
+        [data-testid="stPopover"] button * {{
+            color: {COSMOS_BLUE} !important;
+            fill: {COSMOS_BLUE} !important;
+        }}
+        [data-testid="stSidebar"] .stButton button:hover,
+        [data-testid="stButton"] > button:hover,
+        [data-testid="stPopover"] button:hover {{
+            background: #f7fbff;
+            color: {COSMOS_BLUE};
+            border-color: #f7fbff;
         }}
         .legend-row {{
             display: flex;
             gap: 1.2rem;
             flex-wrap: wrap;
             margin-top: 0.65rem;
-            margin-bottom: 0.35rem;
+            margin-bottom: 0.6rem;
         }}
         .legend-item {{
-            font-weight: 700;
+            font-weight: 600;
             color: #ffffff;
         }}
-        .stDataFrame {{
-            border: 1px solid #7aa8ef;
-            border-radius: 12px;
-            overflow: hidden;
-        }}
-        [data-testid="stInfo"], [data-testid="stWarning"] {{
-            background: #003049;
-            color: #ffffff;
-            border: 1px solid #7aa8ef;
+        [data-testid="stInfo"], [data-testid="stWarning"], [data-testid="stSuccess"] {{
+            background: {LIGHT_BLUE};
+            color: #10263d;
+            border: 1px solid #bfd4f3;
             box-shadow: none;
         }}
         </style>
@@ -231,17 +218,13 @@ def render_header() -> None:
     )
 
 
-def render_warning_box(assessment, recommendations: dict) -> None:
-    """Display a clean early warning panel."""
+def render_neutral_box(title: str, body: str) -> None:
+    """Render a simple neutral content box."""
     st.markdown(
         f"""
-        <div class="warning-box">
-            <div style="font-size:1.05rem; font-weight:800; margin-bottom:0.35rem;">
-                {assessment.warning_title}
-            </div>
-            <div style="margin-bottom:0.6rem;">{assessment.warning_message}</div>
-            <div>Safe Zone: {assessment.safe_zone_type}</div>
-            <div>Suggested Rescue Teams: {recommendations["rescue_teams"]}</div>
+        <div class="resq-box">
+            <div style="font-weight:700; margin-bottom:0.3rem;">{title}</div>
+            <div>{body}</div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -250,20 +233,8 @@ def render_warning_box(assessment, recommendations: dict) -> None:
 
 def build_disaster_map(disaster_frame: pd.DataFrame, selected_region: str) -> go.Figure:
     """Create the disaster risk map with safe zones."""
-    map_frame = disaster_frame.copy()
-    map_frame["hover_text"] = map_frame.apply(
-        lambda row: (
-            f"<b>{row['region']}</b><br>"
-            f"Disaster: {row['disaster_type']}<br>"
-            f"Risk: {row['risk_level']}<br>"
-            f"Population: {int(row['population']):,}<br>"
-            f"Safe Zone: {row['safe_zone_type']}"
-        ),
-        axis=1,
-    )
-
     figure = px.scatter_mapbox(
-        map_frame,
+        disaster_frame,
         lat="latitude",
         lon="longitude",
         color="risk_level",
@@ -281,21 +252,20 @@ def build_disaster_map(disaster_frame: pd.DataFrame, selected_region: str) -> go
             "latitude": False,
             "longitude": False,
         },
-        size=[18 if region == selected_region else 12 for region in map_frame["region"]],
+        size=[18 if region == selected_region else 12 for region in disaster_frame["region"]],
         size_max=18,
         zoom=2.6,
-        height=520,
+        height=500,
     )
 
-    safe_zone_frame = map_frame.copy()
     figure.add_trace(
         go.Scattermapbox(
-            lat=safe_zone_frame["safe_zone_lat"],
-            lon=safe_zone_frame["safe_zone_lon"],
+            lat=disaster_frame["safe_zone_lat"],
+            lon=disaster_frame["safe_zone_lon"],
             mode="markers",
             marker=go.scattermapbox.Marker(size=14, color=COSMOS_BLUE, symbol="star"),
             name="Safe Zone",
-            text=safe_zone_frame.apply(
+            text=disaster_frame.apply(
                 lambda row: f"{row['region']} Safe Zone - {row['safe_zone_type']}",
                 axis=1,
             ),
@@ -321,50 +291,79 @@ def build_disaster_map(disaster_frame: pd.DataFrame, selected_region: str) -> go
     return figure
 
 
-def render_table(dataframe: pd.DataFrame) -> None:
-    """Render a theme-aware table preview."""
-    styled = dataframe.to_html(index=False, border=0)
-    st.markdown(
-        f"""
-        <div class="resq-card" style="overflow-x:auto;">
-            {styled}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+def build_impact_message(assessment) -> str:
+    """Create a short impact statement based on the current risk."""
+    if assessment.risk_level == "High":
+        return f"This could affect {assessment.affected_population:,} people and immediate action is required."
+    if assessment.risk_level == "Medium":
+        return f"This could affect {assessment.affected_population:,} people and preparedness measures are recommended."
+    return "Estimated impact is limited at current conditions, but monitoring should continue."
+
+
+def build_ai_context(assessment, recommendations: dict) -> dict:
+    """Build the app context that will be sent to Gemini."""
+    return {
+        "Region": assessment.region,
+        "Disaster Type": assessment.disaster_type,
+        "Risk Score": assessment.risk_score,
+        "Risk Level": assessment.risk_level,
+        "Affected Population": f"{assessment.affected_population:,}",
+        "Safe Zone": assessment.safe_zone_type,
+        "Rescue Teams": recommendations["rescue_teams"],
+        "Food Packets": recommendations["food_packets"],
+        "Medical Kits": recommendations["medical_kits"],
+        "Warning Message": assessment.warning_message,
+    }
 
 
 def main() -> None:
     """Render the RESQnet dashboard."""
+    initialize_state()
     dataframe = load_data_cached()
     apply_resqnet_theme()
     render_header()
 
     with st.sidebar:
-        st.header("Inputs")
+        st.header("Step 1: Inputs")
         disaster_types = get_disaster_types(dataframe)
         selected_disaster = st.selectbox("Disaster Type", options=disaster_types)
-        disaster_regions = get_region_names(get_disaster_subset(dataframe, selected_disaster))
+        disaster_subset = get_disaster_subset(dataframe, selected_disaster)
+        disaster_regions = get_region_names(disaster_subset)
         selected_region = st.selectbox("Location", options=disaster_regions)
-        analyze_clicked = st.button("Analyze Risk", type="primary", use_container_width=True)
+        slider_default = get_default_rainfall(get_region_record(disaster_subset, selected_region)["risk_level"])
+        rainfall_input = st.slider("Rainfall / Severity Input", min_value=0, max_value=100, value=slider_default)
 
-    selected_record = get_region_record(dataframe, selected_region)
-    assessment = assess_region(selected_record)
-    recommendations = calculate_resource_recommendations(assessment.affected_population)
-    disaster_map_frame = get_disaster_subset(dataframe, selected_disaster)
+        st.header("Step 2: Analyze")
+        analyze_clicked = st.button("Analyze Risk", type="primary", width="stretch")
 
     if analyze_clicked:
-        st.toast(f"RESQnet refreshed {selected_region}")
+        st.session_state.analysis_ready = True
+        st.session_state.analysis_state = {
+            "disaster": selected_disaster,
+            "region": selected_region,
+            "rainfall": rainfall_input,
+        }
+        st.session_state.simulation_data = None
+        st.session_state.simulation_label = ""
+        st.session_state.ai_answer = ""
+        st.session_state.sms_status = ""
 
-    st.subheader("Risk Summary")
+    if not st.session_state.analysis_ready or not st.session_state.analysis_state:
+        st.info("Complete the inputs and click Analyze Risk to view the full dashboard.")
+        return
+
+    analysis_state = st.session_state.analysis_state
+    analyzed_subset = get_disaster_subset(dataframe, analysis_state["disaster"])
+    analyzed_record = get_region_record(analyzed_subset, analysis_state["region"])
+    assessment = assess_region(analyzed_record, rainfall_level=analysis_state["rainfall"])
+    recommendations = calculate_resource_recommendations(assessment.affected_population)
+
+    st.subheader("Step 3: Risk Summary")
     summary_left, summary_mid, summary_right = st.columns(3)
     with summary_left:
-        st.markdown(
-            f"<div class='risk-chip'>{assessment.risk_level} Risk</div>",
-            unsafe_allow_html=True,
-        )
         st.metric("Risk Score", f"{assessment.risk_score}/100")
         st.metric("Population", f"{assessment.population:,}")
+        st.metric("Risk Level", assessment.risk_level)
     with summary_mid:
         st.metric("Estimated Affected People", f"{assessment.affected_population:,}")
         st.metric("Rescue Teams", recommendations["rescue_teams"])
@@ -374,11 +373,27 @@ def main() -> None:
         st.metric("Temporary Shelters", recommendations["temporary_shelters"])
         st.metric("Safe Zone", assessment.safe_zone_type)
 
-    st.subheader("Early Warning")
-    render_warning_box(assessment, recommendations)
+    st.subheader("Impact Message")
+    render_neutral_box("Current Impact", build_impact_message(assessment))
 
-    st.markdown("### Disaster Risk Map")
-    st.plotly_chart(build_disaster_map(disaster_map_frame, selected_region), use_container_width=True)
+    st.subheader("Early Warning")
+    render_neutral_box(assessment.warning_title, assessment.warning_message)
+
+    if st.button("Simulate Disaster Progression"):
+        st.session_state.simulation_data = pd.DataFrame(
+            simulate_disaster_progression(analyzed_record, analysis_state["rainfall"])
+        )
+        st.session_state.simulation_label = f"Simulation Progression for {assessment.region}"
+
+    if st.session_state.simulation_data is not None:
+        st.subheader("Simulation Progression")
+        st.caption(st.session_state.simulation_label)
+        st.dataframe(st.session_state.simulation_data, width="stretch", hide_index=True)
+        simulation_chart = st.session_state.simulation_data.set_index("Step")[["Risk Score"]]
+        st.line_chart(simulation_chart, width="stretch")
+
+    st.subheader("Disaster Risk Map")
+    st.plotly_chart(build_disaster_map(analyzed_subset, assessment.region), width="stretch")
     st.markdown(
         """
         <div class="legend-row">
@@ -391,24 +406,60 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    # DATASET PREVIEW RESTORED
+    st.subheader("Recommendations")
+    recommendation_df = pd.DataFrame(
+        {
+            "Resource": ["Rescue Teams", "Food Packets", "Medical Kits", "Temporary Shelters"],
+            "Recommended Quantity": [
+                recommendations["rescue_teams"],
+                recommendations["food_packets"],
+                recommendations["medical_kits"],
+                recommendations["temporary_shelters"],
+            ],
+        }
+    )
+    st.dataframe(recommendation_df, width="stretch", hide_index=True)
+
     st.subheader("Dataset Preview")
-    st.dataframe(disaster_map_frame, use_container_width=True, hide_index=True)
+    st.dataframe(analyzed_subset, width="stretch", hide_index=True)
+
+    st.subheader("RESQnet AI Assistant")
+    ai_question = st.text_input("Ask RESQnet about the current situation")
+    if st.button("Ask AI"):
+        if not ai_question.strip():
+            st.warning("Enter a question for the AI assistant.")
+        else:
+            try:
+                with st.spinner("Generating AI response..."):
+                    st.session_state.ai_answer = get_gemini_response(
+                        ai_question,
+                        build_ai_context(assessment, recommendations),
+                    )
+            except ValueError as error:
+                st.info(str(error))
+            except Exception:
+                st.error("The AI assistant could not respond right now. Please try again.")
+
+    if st.session_state.ai_answer:
+        render_neutral_box("AI Response", st.session_state.ai_answer)
 
     st.subheader("RESQnet Emergency Alerts")
-    if assessment.risk_level == "High":
-        sms_message = build_sms_alert(assessment)
-        st.markdown(
-            f"""
-            <div class="sms-box">
-{sms_message}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.warning("Sending alerts to affected users...")
-    else:
-        st.info("Mass SMS alerts are not triggered for this location right now. RESQnet continues active monitoring.")
+    sms_message = build_sms_alert(assessment)
+    render_neutral_box("SMS Preview", sms_message)
+
+    if st.button("Send Alerts"):
+        if assessment.risk_level == "Low":
+            st.session_state.sms_status = "No alerts needed at this time."
+        else:
+            with st.spinner("Sending alerts..."):
+                time.sleep(1)
+            st.session_state.sms_status = f"{estimate_notified_users(assessment.affected_population):,} users notified"
+
+    if st.session_state.sms_status:
+        if assessment.risk_level == "Low":
+            st.info(st.session_state.sms_status)
+        else:
+            st.success(st.session_state.sms_status)
 
 
 if __name__ == "__main__":
