@@ -261,9 +261,9 @@ def create_zone_map(row: pd.Series) -> go.Figure:
             )
         )
 
-    create_circle(60, "#4CAF50", 0.2)
-    create_circle(40, "#FFD93D", 0.3)
-    create_circle(20, "#FF4B4B", 0.4)
+    create_circle(60, "rgba(76, 175, 80, 0.18)", 0.18)
+    create_circle(40, "rgba(255, 217, 61, 0.22)", 0.22)
+    create_circle(20, "rgba(255, 75, 75, 0.28)", 0.28)
 
     figure.add_trace(
         go.Scattermapbox(
