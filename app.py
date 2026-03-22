@@ -231,51 +231,47 @@ def render_neutral_box(title: str, body: str) -> None:
     )
 
 
-def build_disaster_map(disaster_frame: pd.DataFrame, selected_region: str) -> go.Figure:
-    """Create the disaster risk map with safe zones."""
+def create_map(disaster_frame: pd.DataFrame) -> go.Figure:
+    """Create a centered disaster risk map that keeps all valid locations visible."""
+    map_frame = disaster_frame.copy()
+    map_frame = map_frame.dropna(subset=["latitude", "longitude"])
+    map_frame = map_frame[
+        map_frame["latitude"].between(-90, 90) & map_frame["longitude"].between(-180, 180)
+    ]
+
+    marker_sizes = [
+        15 if risk == "High" else 10 if risk == "Medium" else 8 for risk in map_frame["risk_level"]
+    ]
+
     figure = px.scatter_mapbox(
-        disaster_frame,
+        map_frame,
         lat="latitude",
         lon="longitude",
+        hover_name="region",
+        hover_data=["risk_level", "disaster_type"],
         color="risk_level",
         color_discrete_map={
-            "High": HIGH_RISK_COLOR,
-            "Medium": MEDIUM_RISK_COLOR,
-            "Low": LOW_RISK_COLOR,
+            "High": "#FF4B4B",
+            "Medium": "#FFD93D",
+            "Low": "#4CAF50",
         },
-        hover_name="region",
-        hover_data={
-            "disaster_type": True,
-            "risk_level": True,
-            "population": True,
-            "safe_zone_type": True,
-            "latitude": False,
-            "longitude": False,
-        },
-        size=[18 if region == selected_region else 12 for region in disaster_frame["region"]],
-        size_max=18,
-        zoom=2.6,
+        size=marker_sizes,
+        size_max=15,
+        zoom=3,
         height=500,
     )
 
-    figure.add_trace(
-        go.Scattermapbox(
-            lat=disaster_frame["safe_zone_lat"],
-            lon=disaster_frame["safe_zone_lon"],
-            mode="markers",
-            marker=go.scattermapbox.Marker(size=14, color=COSMOS_BLUE, symbol="star"),
-            name="Safe Zone",
-            text=disaster_frame.apply(
-                lambda row: f"{row['region']} Safe Zone - {row['safe_zone_type']}",
-                axis=1,
-            ),
-            hovertemplate="%{text}<extra></extra>",
-        )
-    )
-
+    figure.update_traces(marker={"symbol": "circle"})
     figure.update_layout(
         mapbox_style="open-street-map",
-        margin={"l": 0, "r": 0, "t": 0, "b": 0},
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
+        mapbox=dict(
+            center=dict(
+                lat=map_frame["latitude"].mean(),
+                lon=map_frame["longitude"].mean(),
+            ),
+            zoom=3,
+        ),
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -393,7 +389,8 @@ def main() -> None:
         st.line_chart(simulation_chart, width="stretch")
 
     st.subheader("Disaster Risk Map")
-    st.plotly_chart(build_disaster_map(analyzed_subset, assessment.region), width="stretch")
+    st.write(analyzed_subset)
+    st.plotly_chart(create_map(analyzed_subset), width="stretch")
     st.markdown(
         """
         <div class="legend-row">
