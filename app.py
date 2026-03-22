@@ -1,5 +1,6 @@
 import time
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -231,55 +232,68 @@ def render_neutral_box(title: str, body: str) -> None:
     )
 
 
-def create_map(disaster_frame: pd.DataFrame) -> go.Figure:
-    """Create a centered disaster risk map that keeps all valid locations visible."""
-    map_frame = disaster_frame.copy()
-    map_frame = map_frame.dropna(subset=["latitude", "longitude"])
-    map_frame = map_frame[
-        map_frame["latitude"].between(-90, 90) & map_frame["longitude"].between(-180, 180)
-    ]
+def create_zone_map(row: pd.Series) -> go.Figure:
+    """Create a single-region zone map with layered impact circles and safe zone marker."""
+    lat = float(row["latitude"])
+    lon = float(row["longitude"])
 
-    marker_sizes = [
-        15 if risk == "High" else 10 if risk == "Medium" else 8 for risk in map_frame["risk_level"]
-    ]
+    figure = go.Figure()
 
-    figure = px.scatter_mapbox(
-        map_frame,
-        lat="latitude",
-        lon="longitude",
-        hover_name="region",
-        hover_data=["risk_level", "disaster_type"],
-        color="risk_level",
-        color_discrete_map={
-            "High": "#FF4B4B",
-            "Medium": "#FFD93D",
-            "Low": "#4CAF50",
-        },
-        size=marker_sizes,
-        size_max=15,
-        zoom=3,
-        height=500,
+    def create_circle(radius_km: float, color: str, opacity: float) -> None:
+        angles = np.linspace(0, 2 * np.pi, 100)
+        lat_circle = lat + (radius_km / 111) * np.cos(angles)
+        cosine = np.cos(np.radians(lat))
+        if abs(cosine) < 0.01:
+            cosine = 0.01
+        lon_circle = lon + (radius_km / (111 * cosine)) * np.sin(angles)
+
+        figure.add_trace(
+            go.Scattermapbox(
+                lat=lat_circle,
+                lon=lon_circle,
+                mode="lines",
+                fill="toself",
+                fillcolor=color,
+                opacity=opacity,
+                line=dict(width=0),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
+    create_circle(60, "#4CAF50", 0.2)
+    create_circle(40, "#FFD93D", 0.3)
+    create_circle(20, "#FF4B4B", 0.4)
+
+    figure.add_trace(
+        go.Scattermapbox(
+            lat=[lat],
+            lon=[lon],
+            mode="markers",
+            marker=dict(size=14, color="#0B3D91"),
+            text=[row["region"]],
+            name="Location",
+            hovertemplate="%{text}<extra></extra>",
+        )
     )
 
-    figure.update_traces(marker={"symbol": "circle"})
+    figure.add_trace(
+        go.Scattermapbox(
+            lat=[row["safe_zone_lat"]],
+            lon=[row["safe_zone_lon"]],
+            mode="markers",
+            marker=dict(size=12, color="#0B3D91", symbol="star"),
+            text=[f"Safe Zone: {row['safe_zone_type']}"],
+            name="Safe Zone",
+            hovertemplate="%{text}<extra></extra>",
+        )
+    )
+
     figure.update_layout(
         mapbox_style="open-street-map",
+        mapbox=dict(center=dict(lat=lat, lon=lon), zoom=8),
         margin={"r": 0, "t": 0, "l": 0, "b": 0},
-        mapbox=dict(
-            center=dict(
-                lat=map_frame["latitude"].mean(),
-                lon=map_frame["longitude"].mean(),
-            ),
-            zoom=3,
-        ),
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="left",
-            x=0.0,
-            font=dict(color="white"),
-        ),
+        height=500,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color="white"),
@@ -350,8 +364,20 @@ def main() -> None:
 
     analysis_state = st.session_state.analysis_state
     analyzed_subset = get_disaster_subset(dataframe, analysis_state["disaster"])
-    analyzed_record = get_region_record(analyzed_subset, analysis_state["region"])
-    assessment = assess_region(analyzed_record, rainfall_level=analysis_state["rainfall"])
+    filtered_df = analyzed_subset[
+        analyzed_subset["region"].str.strip().str.lower() == analysis_state["region"].strip().lower()
+    ].copy()
+    st.write(filtered_df)
+    if filtered_df.empty:
+        st.error("No data available for selected region")
+        st.stop()
+
+    selected_row = filtered_df.iloc[0].copy()
+    if pd.isna(selected_row["safe_zone_lat"]) or pd.isna(selected_row["safe_zone_lon"]):
+        selected_row["safe_zone_lat"] = selected_row["latitude"]
+        selected_row["safe_zone_lon"] = selected_row["longitude"]
+
+    assessment = assess_region(selected_row, rainfall_level=analysis_state["rainfall"])
     recommendations = calculate_resource_recommendations(assessment.affected_population)
 
     st.subheader("Step 3: Risk Summary")
@@ -377,7 +403,7 @@ def main() -> None:
 
     if st.button("Simulate Disaster Progression"):
         st.session_state.simulation_data = pd.DataFrame(
-            simulate_disaster_progression(analyzed_record, analysis_state["rainfall"])
+            simulate_disaster_progression(selected_row, analysis_state["rainfall"])
         )
         st.session_state.simulation_label = f"Simulation Progression for {assessment.region}"
 
@@ -389,15 +415,14 @@ def main() -> None:
         st.line_chart(simulation_chart, width="stretch")
 
     st.subheader("Disaster Risk Map")
-    st.write(analyzed_subset)
-    st.plotly_chart(create_map(analyzed_subset), width="stretch")
+    st.plotly_chart(create_zone_map(selected_row), width="stretch")
     st.markdown(
         """
         <div class="legend-row">
-            <div class="legend-item">High Risk</div>
-            <div class="legend-item">Medium Risk</div>
-            <div class="legend-item">Low Risk</div>
-            <div class="legend-item">Safe Zone</div>
+            <div class="legend-item">🔴 High Impact Area</div>
+            <div class="legend-item">🟡 Moderate Impact Area</div>
+            <div class="legend-item">🟢 Low Impact Area</div>
+            <div class="legend-item">🔵 Safe Zone</div>
         </div>
         """,
         unsafe_allow_html=True,
