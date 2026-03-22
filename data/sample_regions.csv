@@ -1,0 +1,21 @@
+region,disaster_type,latitude,longitude,risk_level,population,safe_zone_lat,safe_zone_lon,safe_zone_type
+Assam (India),Flood,26.2006,92.9376,High,35607039,26.2045,92.9435,High-rise buildings
+Kerala (India),Flood,10.8505,76.2711,Medium,35699443,10.8581,76.2799,High-rise buildings
+Dhaka (Bangladesh),Flood,23.8103,90.4125,High,10356500,23.8179,90.4201,High-rise buildings
+Jakarta (Indonesia),Flood,-6.2088,106.8456,High,10562088,-6.2012,106.8538,High-rise buildings
+Bangkok (Thailand),Flood,13.7563,100.5018,Medium,10539000,13.7641,100.5106,High-rise buildings
+Tokyo (Japan),Earthquake,35.6762,139.6503,High,13960000,35.6851,139.6612,Open ground / strong structures
+San Francisco (USA),Earthquake,37.7749,-122.4194,Medium,808988,37.7832,-122.4098,Open ground / strong structures
+Nepal Region,Earthquake,27.7172,85.3240,High,30000000,27.7256,85.3347,Open ground / strong structures
+Chile Coast,Earthquake,-33.4489,-70.6693,Medium,19116209,-33.4398,-70.6584,Open ground / strong structures
+Turkey Fault Zone,Earthquake,39.9334,32.8597,High,85275853,39.9412,32.8721,Open ground / strong structures
+California (USA),Wildfire,36.7783,-119.4179,High,39538223,36.7904,-119.4022,Open areas without trees
+Australia Bushlands,Wildfire,-35.2809,149.1300,Medium,26200000,-35.2701,149.1442,Open areas without trees
+Amazon Edge,Wildfire,-3.4653,-62.2159,High,5500000,-3.4528,-62.1997,Open areas without trees
+Greece Forest,Wildfire,38.2466,21.7346,Medium,10423054,38.2541,21.7498,Open areas without trees
+Spain Rural,Wildfire,40.4168,-3.7038,Low,47450795,40.4287,-3.6894,Open areas without trees
+Odisha Coast (India),Cyclone,19.8135,85.8312,High,46356334,19.8243,85.8441,Basements / bunkers
+Philippines Coast,Cyclone,14.5995,120.9842,High,117337368,14.6104,120.9963,Basements / bunkers
+Florida Coast (USA),Cyclone,27.6648,-81.5158,Medium,21538187,27.6779,-81.4984,Basements / bunkers
+Vietnam Coast,Cyclone,16.4637,107.5909,Medium,100300000,16.4768,107.6041,Basements / bunkers
+Madagascar Coast,Cyclone,-18.7669,46.8691,High,30325732,-18.7542,46.8835,Basements / bunkers
